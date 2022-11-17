@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
 import $ from "jquery";
+import axios from "axios";
+import { converBase64ToImage } from "convert-base64-to-image";
+import { url } from "inspector";
 
 function DeviceLogs() {
   const w = window as any;
@@ -8,11 +11,15 @@ function DeviceLogs() {
     ? JSON.parse(localStorage.getItem("session") ?? "")
     : {};
   const [dbStatus, setDbStatus] = useState(session.dbStatus ?? "Disconnected");
+  const [webhookstatus, setWebhookstatus] = useState(
+    session.webhookstatus ?? "Offline"
+  );
   const [deviceCount, setDeviceCount] = useState(session.deviceCount ?? 0);
   const [punchCount, setPunchCount] = useState(session.punchCount ?? 0);
   const [notificationStatus, setNotificationStatus] = useState(
     session.notificationStatus ?? 0
   );
+  const [logData, setLogData] = useState<any[]>([]);
   const [dbData, setDbData] = useState(
     session.dbData ?? {
       schema: "",
@@ -20,6 +27,7 @@ function DeviceLogs() {
       dbname: "",
       username: "",
       password: "",
+      url: "",
     }
   );
   useEffect(() => {
@@ -29,10 +37,17 @@ function DeviceLogs() {
       punchCount,
       notificationStatus,
       dbData,
+      webhookstatus,
     });
     localStorage.setItem("session", jsonObj);
-    console.log(jsonObj);
-  }, [dbStatus, deviceCount, punchCount, notificationStatus, dbData]);
+  }, [
+    dbStatus,
+    deviceCount,
+    punchCount,
+    notificationStatus,
+    dbData,
+    webhookstatus,
+  ]);
 
   const setDbDataHandler = () => {
     electronAPI?.setDb({
@@ -41,6 +56,7 @@ function DeviceLogs() {
       dbname: dbData.dbname,
       username: dbData.username,
       password: dbData.password,
+      url: dbData.url,
     });
   };
 
@@ -50,6 +66,18 @@ function DeviceLogs() {
     });
     electronAPI?.handlePunchesCount((event: any, value: any) => {
       setPunchCount(value);
+      try {
+        axios.post(
+          "https://webhook.site/220cf9f8-eeaa-4e1e-a3f9-e0b3e60728b0",
+          {
+            id: value,
+            time: Date.now(),
+          }
+        );
+        setWebhookstatus("Online");
+      } catch (error) {
+        setWebhookstatus("Offline");
+      }
     });
     electronAPI?.handleDeviceCount((event: any, value: any) => {
       setDeviceCount(value);
@@ -59,19 +87,22 @@ function DeviceLogs() {
     });
 
     electronAPI?.handlesuccess((event: any, value: any) => {
-      $("#log-list").append(`<p>
-      <span style="color: #4318ff"> ${Date.now()} </span>> ${value}
-    </p>`);
-      // schemaInput.disabled = true;
-      // hostInput.disabled = true;
-      // dbnameInput.disabled = true;
-      // usernameInput.disabled = true;
-      // passwordInput.disabled = true;
+      const dateFormat = new Intl.DateTimeFormat("en-US", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      if (value?.message) {
+        setLogData((prev) => [value, ...prev]);
+      }
     });
 
     electronAPI?.handleDbcondfig((event: any, value: any) => {
       value = JSON.parse(value);
-      console.log("Handleconfig>>", value);
+      console.log("Handleconfig>>", value, event);
 
       setDbData({
         schema: value.schema,
@@ -79,6 +110,7 @@ function DeviceLogs() {
         dbname: value.dbname,
         username: value.username,
         password: value.password,
+        url: value.url,
       });
     });
   };
@@ -128,6 +160,7 @@ function DeviceLogs() {
                   <div>
                     <p>Host</p>
                     <input
+                      value={dbData.host}
                       id="host"
                       placeholder="Localhost"
                       className="input-style"
@@ -137,6 +170,7 @@ function DeviceLogs() {
                   <div>
                     <p>DB Name</p>
                     <input
+                      value={dbData.dbname}
                       id="dbname"
                       placeholder="Mongo DB"
                       className="input-style"
@@ -146,6 +180,7 @@ function DeviceLogs() {
                   <div>
                     <p>Schema</p>
                     <input
+                      value={dbData.schema}
                       id="schema"
                       placeholder="schema value"
                       className="input-style"
@@ -157,6 +192,7 @@ function DeviceLogs() {
                   <div>
                     <p>User Name</p>
                     <input
+                      value={dbData.username}
                       id="username"
                       placeholder="Ragul Palanivel"
                       className="input-style"
@@ -166,8 +202,19 @@ function DeviceLogs() {
                   <div>
                     <p>Password</p>
                     <input
+                      value={dbData.password}
                       id="password"
                       placeholder="*********"
+                      className="input-style"
+                      type="password"
+                    />
+                  </div>
+                  <div>
+                    <p>URL</p>
+                    <input
+                      value={dbData.url}
+                      id="url"
+                      placeholder="Enter the URL"
                       className="input-style"
                       type="text"
                     />
@@ -188,7 +235,7 @@ function DeviceLogs() {
             <div>
               <div className="d-flex justify-content-between">
                 <h3 style={{ color: "#003166" }}>Status</h3>
-                <button className="button-reset">Reset</button>
+                {/* <button className="button-reset">Reset</button> */}
               </div>
               <div>
                 <div
@@ -211,20 +258,65 @@ function DeviceLogs() {
                     <h6>Database Status</h6>
                     <p id="dbconnectionstatus">{dbStatus}</p>
                   </div>
+                  <div className="cards" style={{ backgroundColor: "#edf2ff" }}>
+                    <h6>Webhook Status</h6>
+                    <p id="dbconnectionstatus">{webhookstatus}</p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
         <div className="right-section" style={{ width: "50%" }}>
-          <h3 className="title" style={{ color: "#003166" }}>
-            Logs
-          </h3>
           <div
-            id="log-list"
-            className="log-list"
-            style={{ padding: "1rem" }}
-          ></div>
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+            }}
+          >
+            <h3 className="title" style={{ color: "#003166" }}>
+              Realtime logs
+            </h3>
+            <button className="button-reset" onClick={() => setLogData([])}>
+              Clear log
+            </button>
+          </div>
+          <div id="log-list" className="log-list" style={{ padding: "1rem" }}>
+            {logData.map((value) => (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "1rem",
+                  borderBottom: "1px solid #ccc",
+                  padding: "1rem 0",
+                  justifyContent: "space-between",
+                }}
+              >
+                <p>
+                  <span style={{ color: "#4318ff" }}>
+                    {new Date().toLocaleTimeString()}
+                  </span>{" "}
+                  {">"}{" "}
+                  <span
+                    style={{
+                      color: (value.message as string)?.includes("Stranger")
+                        ? "red"
+                        : "green",
+                    }}
+                  >
+                    {value?.message}
+                  </span>
+                </p>
+                {value?.image && (
+                  <img
+                    className="zoom-hover"
+                    src={`data:image/jpeg;base64,${value.image}`}
+                    height="100"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       {/* <script src="https://code.jquery.com/jquery-3.6.1.js" integrity="sha256-3zlB5s2uwoUzrXK3BT7AX3FyvojsraNFxCc2vC/7pNI=" crossorigin="anonymous"></script> */}
